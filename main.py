@@ -1,10 +1,11 @@
-from tqdm import tqdm
+from rich.progress import track
 
 import jax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp as lse
 
 import optax
+import equinox as eqx
 
 import matplotlib.pyplot as plt
 
@@ -29,7 +30,8 @@ def cky(params, obs):
     assert len(rules.shape) == 5
 
     emit = jnp.exp(emit - lse(emit, 0, keepdims=True))
-    rules = jnp.exp(rules - lse(rules, 0, keepdims=True))
+    rules = jnp.exp(rules
+        - lse(rules.reshape(states, -1), -1).reshape((states,) + 4*(1,)))
 
     chart = jnp.zeros((height, height+1, width, width+1, states))
 
@@ -61,16 +63,18 @@ rules = jax.random.uniform(key, 5*(num_classes,), minval=-0.01, maxval=0.01)
 params = (emit, rules)
 
 def loss(params, X):
-    vmap(cky, )
-dcky = jax.value_and_grad(cky)
+    return jax.vmap(cky, (None, 0), 0)(params, X).mean()
+#dcky = jax.jit(jax.value_and_grad(loss))
+dcky = jax.value_and_grad(loss)
 
 
 optimizer = optax.adam(1e-3)
 # Obtain the `opt_state` that contains statistics for the optimizer.
 opt_state = optimizer.init(params)
 
-for i in tqdm(range(1000)):
-    Z, grads = dcky(params, X[0])
+for i in track(range(1000)):
+    Z, grads = dcky(params, X)
+    import pdb; pdb.set_trace()
     updates, opt_state = optimizer.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
 import pdb; pdb.set_trace()
